@@ -1,0 +1,259 @@
+---
+title: "Predictive Modeling on Seattle Housing Prices"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message=FALSE, warning=FALSE,message=FALSE)
+```
+
+```{r basicfcn, include=F}
+# can add quietly=T option to the require() function 
+# this function allows the pacakge to either be called directly or installed if necessary
+loadPkg = function(x) { if (!require(x,character.only=T, quietly =T)) { install.packages(x,dep=T,repos="http://cran.us.r-project.org"); if(!require(x,character.only=T)) stop("Package not found") } }
+```
+
+```{r}
+#load all required packages
+loadPkg('readr')
+loadPkg('Hmisc')
+loadPkg('pastecs')
+loadPkg('leaps')
+loadPkg('ISLR')
+loadPkg('tidyverse')
+loadPkg('lubridate')
+loadPkg('DT')
+loadPkg('pls')
+loadPkg('mice')
+loadPkg('spatstat')
+loadPkg('MASS')
+loadPkg('car')
+loadPkg('pander')
+#load the raw data
+Raw_Data <- read_csv("kc_house_data.csv")
+
+```
+
+####Background
+
+The aim of this project is to predict the sale price of a house in King County, Washington.
+The source of our data is the Kaggle.com website. 
+According to the Census estimates, there were 2.117 million people living in King County, and therefore it is considered the most populous county in Washington. As a result, it has a vibrant housing market. Furthermore, two thirds of King County’s population resides in the suburbs. The country has a total area of 2,307 square miles (5,980 m2) (91.7%) which 2,116 square miles of it is land and 191 square miles (8.3%).  
+The dataset contains features of 20,000 houses sold during the period May 2014 to May 2015.
+
+
+####Data Exploration
+
+The dataset contains 20 features and 21,613 observations across homes sold from May 2014 to 2015. We can explore the data to understand the variables a little bit better. A specific note is that there is no missing data, so we do not to interpolate any of the data.
+
+```{r}
+#basic exploratory data analysis
+str(Raw_Data)
+datatable(head(Raw_Data))
+```
+
+####Topic Literature
+
+In order to determine the key determinants of the housing market we turned towards previous research about housing prices.
+  
+From an economic perspective, Teo Nicolais, a real estate entrepreneur and lecturer at the Harvard Extension School, published an article that provides us with an analysis of the housing market and the nature of its booms and busts. He divides this cycle into four phases: recovery, expansion, hyper supply and recession. First, before we enter the recovery phase, the economy undergoes a recession in which we experience “high unemployment; decreased consumption; and decreased company investment in buildings, factories, and machines” (Nicolais 2017) where land is also cheaper. To recover from such an event, the government lowers interest rates, encouraging investors to purchase buildings—more specifically, this allows businesses to free up some of their capital to “hire more people, build new factories, and buy more machines”— and people to purchase homes (Nicolais 2017). This phase is called the recovery phase or Phase I.  
+  
+After Phase I, we enter Phase 2, the expansion. During this phase we experience a shortage of buildings/land (an increase in demand) and a rise in “rent rates”. Because of this—and the inherent fixed rates of investments in real estate—investors gain more profit than when rates (and supply) of buildings are at the long-term average. The increase in profit enables investors to purchase more buildings and land, leading to the “boom” of the housing market. Likewise rent, as well as occupancy rates, continue to increase over a span of five to seven years. However, due to the nature of construction, “it takes a long time to add new inventory to the real estate market once it’s needed” (Nicolais 2017); and, accordingly, supply cannot meet demand, and investors purchase overpriced buildings.
+  
+At this point, occupancy rates exceed the long-term average and rent rates begin to “deaccelerate” (Nicolais 2017). We then enter Phase III, hyper supply. In this phase, we face an unforeseen “increase in unsold inventory/vacancy.” Following the rent rates, occupancy rates fall below the long-term average, leading to the final phase, Phase 4, recession. The construction of new buildings and homes stops immediately, but, unfortunately, the projects that begin in Phase III continue. The low rent rates and occupancy rates cause investors to lose money, and therefore the Federal Reserve Bank fights the economic downturn by raising the interest rates in hopes of restoring economic stability (discouraging the purchase of buildings, homes and land). Eventually we return to Phase I and the cycle begins. 
+  
+This leads us to ask about the external factors currently affecting the housing market. In a summary report written on gordcollins.com, mortgage rates continue to remain low and “people are buying and prices are rising in most major markets”; however, it is mentioned that the housing market is better for sellers than it is for the buyers, including speculation of an impending housing bubble (Collins 2017). However, “Most real estate sales and real estate investment experts are predicting a strong year ahead for US housing in 2018 for the next 5 years” (Collins 2017). As of now, the best place to purchase a home is on the west coast of the United States, in particular, several major cities in California (Collins 2017).
+  
+Factors listed as to why buyers are interested in purchasing homes in the near future include prices appreciating, increase in millennial families, high rent for building owners (giving them a good return on investment), the stability of the economy and more Canadians planning to move to the United States, which the latter could be an explanatory variable as to the higher prices for homes in Kings County, Washington, since Canada and Washington state share a border. In fact, “Eric Fox, vice president of statistical and economic modeling (VeroForecast),” says that the “top forecast markets shows price appreciation in the 10% to 11% range. The top forecast market is Seattle, Washington at 11.2%, followed by Portland, Oregon at 11.1% and Denver, Colorado at 9.9%,” due to their healthy economies, growing populations and shortage of available homes (gordcollins). Therefore, since Seattle is listed as a top housing market and the U.S. economy is stable, we are interested in understanding, outside any economic/external factors, which variables best predict the price of a home.
+  
+In the peer-reviewed paper Multivariate Regression Modeling for Home Value Estimates with Evaluation using Maximum Information Coefficient, Gongzhu Hu, Jinping Wang, and Wenying Feng created a predictive model, namely a multivariate regression model, using 81 homes to predict housing prices. They divide the predictors into two categories, “the environmental information” such as “location, local economy, school district, air quality, etc.,” and characteristics information “such as lot size, house size and age, number of rooms, heating / AC systems, garage, and so on” (Hu, Wang, & Feng 1-2). According to the article, predicting housing prices have been a great interest for decades, using several different models. One model mentioned is the hedonic pricing model, which predict the price of goods based on the characteristics of goods as well as the external factors at play. Hu, Wang and Feng use a variation of hedonic regression, which is more or less the hedonic pricing model but excludes the external factors to predict the prices of homes.
+  
+Mentioned in class and practiced in the homework, they used the Best fit regression subset method, as well as adjusted R squared and Mallow’s Cp, to select the predictors for their model. However, unlike the models developed in class, theirs not only has first-order variables as predictors but also second-order variables. To name a few predictors, the model included the area of the house, number of bedrooms, number of full baths, number of half baths, number of stories, size of lot and more (Hu, Wang, & Feng 4). The final result included ten variables. With statistical significance, they had shown that the source of heat (natural gas or fireplace) in a house is not significant with respect to the price of a home, as well as the number of bedrooms and area in square footage. The most influential variable was Acriage (the size of the lot in acres). Finally, it is important to note that they concluded external factors that are normally included in hedonic regression should have been in the model (Hu, Wang, & Feng 8). Additionally, that provided a disclaimer that although the results are statistically sound, a larger dataset, together with the external factors, would provide more reliable results. However, it is important to note that both macro and micro economic decisions from public policymakers and private citizens all require accurate data on the housing market. However, it is not always possible to get the sale value of a house every year, thus looking at market forces can be a crucial aim of research. 
+  
+  
+####Question of Interest
+From this, we seek to develop a model that will help us find the key predictors of housing price. Specifically, we want a model that will predict prices significantly, at the 5% level, close to the true prices.
+
+
+
+####Preparing data
+
+First, we need to clean up the data. Doing so involves converting categorical variables to factors. Also, we need to adjust renovation year, so that there is no time zero. Given that zero means that the house has not been renovated, we can set year_renovated to year built if it is zero. This will give us the variable of time last time of construction. Since we are also curious about the affect of age, we will convert both of the year variables into years since, or subtract the year from 2015, the year of the sales. Furthermore, because the literature suggests that macro effects may contribute to housing price, we can add month/year control variables to help reduce bias.
+
+```{r}
+#convert appropriate variables to factors to prevent the wrong regression
+HousingData <- Raw_Data
+HousingData$Month <- as.factor(month(HousingData$date))
+HousingData$Year <- as.factor(year(HousingData$date))
+HousingData$zipcode <- as.factor(HousingData$zipcode)
+HousingData$condition <- as.factor(HousingData$condition)
+HousingData$grade <- as.factor(HousingData$grade)
+
+#convert years
+HousingData$yr_built <- as.integer(as.character(HousingData$Year))-HousingData$yr_built
+HousingData$yr_renovated <- as.integer(as.character(HousingData$Year))-HousingData$yr_renovated
+
+#adjust year_renovated
+HousingData$yr_renovated <- ifelse(HousingData$yr_renovated>2000,
+                                   HousingData$yr_built,
+                                   HousingData$yr_renovated)
+
+
+```
+
+In order to decide whether we should include all the variables in our dataset, we can quickly look at the correlation between the variables. In order to run the regression, we also need to make sure that there is no perfect multicollinearity. 
+
+```{r}
+#Correlation Matrix
+Correlation_Matrix <- dplyr::select(HousingData, price, bedrooms, bathrooms, sqft_living, sqft_lot, floors, waterfront, view, condition, grade, sqft_above, sqft_basement, yr_built, yr_renovated, Month)
+
+Correlation_Matrix <- as.matrix(Correlation_Matrix)
+Correlation_Matrix <- rcorr(Correlation_Matrix)
+Correlation_Matrix
+```
+
+```{r}
+#we can also check for any linear dependencies
+alias(lm(price~.,data=HousingData[,-c(1,2)]))
+```
+
+With high correlations and significance to price for some factors, its a good clue that our regression equation could have strong predictive power as measured by an adjusted R squared. However there are also some strong correlations between factors we want to use as predictive, so we will likely have to deal with multicollinearity. Similarly, the square footage of the house is split among total, above-ground square footage and basement square footage, so we need to remove one of these variables to prevent any linear dependencies. We removed the above ground square footage. 
+
+Finally, we also purposefully removed zip code from this specific analysis. It's obvious that zip code would have very strong predictive power for any particular sub market, especially in a large city. For example, the price per sqft within the downtown business section would be much higher than out in the suburbs.
+
+However with that said zipcode would not be a predictive factor that could be integrated into a more general model that applies outside of this king county dataset. This is because there's nothing inherent to the zipcode number that predicts a home value, there's just zip codes where high home values happen to have clustered. If you were to take this model outside of King County and attempt to predict a new values home price, you would have no idea if that houses Zip code was one of these generally high value areas or not. In order to see whether this will significantly harm our regression, we can test the nested model of zip codes using a partial F-test. In other words, we will test whether including zip codes significantly improves the explanatory of the regression model, with all other variables included.
+
+```{r}
+#we can check for the benefit of adding zip code as well
+#regress complete regression
+long <- lm(price~.,data=HousingData[,-c(1,2,13,18,19)])
+#regress short regression
+short <- lm(price~.,data=HousingData[,-c(1,2,13,17,18,19)])
+#compare
+pander(anova(short,long))
+```
+
+Thus, we do know that zip code is highly predictive for King County, but in order to generalize the model, we are going to remove it from the future model.
+
+
+####Regression
+
+In order to determine which model to use, we can test forward, backward, and sequential models to determine which variables to include in our model. However, first we will break up our data into training and testing data, so we can test the model on real data. 
+
+```{r}
+#get it so 2/3 of data is in training set, and 1/3 is in testing set
+set.seed(100)
+training_set <- sample(1:nrow(HousingData),nrow(HousingData)*2/3)
+testing_set <- subset(1:nrow(HousingData),!(1:nrow(HousingData) %in% training_set))
+
+#filter out ID variable,data variable, sqft above,zipcode,lat,and long
+train <- HousingData[training_set,-c(1,2,13,17,18,19)]
+test <- HousingData[testing_set,-c(1,2,13,17,18,19)]
+```
+
+First, we can look a the forward selection method.
+
+```{r}
+Forward <- regsubsets(price~., data = train, nbest = 1, method = "forward")
+#summary(Forward)
+plot(Forward, scale = 'adjr2')
+```
+
+In this forward run of factor selection it appears as though sqft of living, waterfront, view, grades 8 - 13 and year renovated were the best factors to use in the model. We will see if this pattern continues as we move run the factor selection with different methods.
+
+```{r}
+Backward <- regsubsets(price~., data = train, nbest = 1, method = "backward")
+#summary(Backward)
+plot(Backward, scale = 'adjr2')
+```
+
+Interestingly it appears as though view has been removed from the list using the backward method. It's possible that there is a linear relationship between waterfront and view already given the location of king county in the northwest pacific coast surrounding Seattle.
+
+```{r}
+Sequential_Replacement <- regsubsets(price~., data = train, nbest = 1, method = "seqrep")
+#summary(Sequential_Replacement)
+plot(Sequential_Replacement, scale = 'adjr2')
+```
+
+Finally the sequential replacement method also retains the same factors as the backward method, and continues to negate the view variable. Thus, we will look to test these variables, specifically: sqft_living, waterfront,grade,sqft_basement,and yr_renovated. We can look at the effect of this training data set.
+
+```{r}
+#create dummy variable for grade to apply the model
+train_grade <- as.data.frame(dummify(train$grade))
+colnames(train_grade) <- paste0("grade",colnames(train_grade))
+train <- cbind(train,train_grade)
+
+#create the model
+model <- lm(price~sqft_living+waterfront+grade3 + grade4 + grade5 + grade6 + grade7 + grade8 + grade9 + grade10 + grade11 + grade12 + grade13 +sqft_basement+yr_renovated,data=train)
+pander(summary(model))
+
+plot(train$price,predict.lm(model,train[,-1]),xlab="Actual Price",ylab="Predicted Price",main="Training Prices")
+```
+
+There seems to be some levels of non-linearity in the model. To test this, we can try to take check some second order effects of different variables. Specifically looking at square-footage (both for total and basement)
+
+```{r}
+#create the model
+second_order <- lm(price~poly(sqft_living,2)+waterfront+grade3 + grade4 + grade5 + grade6 + grade7 + grade8 + grade9 + grade10 + grade11 + grade12 + grade13 + poly(sqft_basement,2)+yr_renovated,data=train)
+pander(summary(second_order))
+
+plot(train$price,predict.lm(second_order,train[,-1]),xlab="Actual Price",ylab="Predicted Price",main="Training Prices")
+```
+  
+This second order model improves the adjusted R^2 by about a percent, and the topic literature suggests that a higher order model should be good.
+
+#### Regression Assumptions
+Before we seek to test our data, it is important to verify that our model can be used. 
+
+First, we will test the basic relationship that height predicts weight. To do this, however, requires evaluating the assumptions. First we will test for normality of the variables. To test the multi-variate normality, we can look at the distribution of the studentized residuals and a Q-Q plot.  
+
+```{r normality, echo=FALSE}
+#plot to test normality
+qqPlot(second_order, main="QQ Plot")
+sresid <- studres(second_order) 
+hist(sresid, freq=FALSE, 
+   main="Distribution of Studentized Residuals")
+```
+
+The qq-plot shows that there may not be perfect normality in the dataset, specifically it looks like there may be a right skew and a low outlier. Looking at the histogram tells the similar story, that while most studentized residuals are centered at zero, there is some variation that causes the data to be right-tailed Future analysis, therefore, may want to consider non-paramtric alternatives. However, for this analysis, we can assume that most of the data is normally distributed, and the model may have general application. 
+
+Given that we tested for linearity already, we will assume that the higher order model controls for the non-linear effect. Looking at the accuracy of the model on the testing data may help us confirm this.
+
+Next, however, we will test heteroscedasticity.
+
+```{r homoscedasticity}
+#test for homoscedasticity
+
+item <- spreadLevelPlot(second_order,main="Spread-Level Plot")
+ncvTest(second_order)
+```
+
+Looking at the spread-level plot and the results from our Test for Non-Constant Error Variance suggests that there may be unequal variance throughout our dataset. However, like th previous assumptions, this appears to be related to the right-tail distribution of expensive homes. Thus, while the heteroscedasticity of the dataset does not cause a bias in our estimates, it may give reason to be skeptical of our standard errors.
+
+
+For the other assumptions, about multicollinearity and auto correlation, we are less worried because this affects the causal influence of the dataset, and specifically its relevance to potentially overfitting the dataset. However, we will be able to test this using its application to the testing dataset. In other words, these assumptions will matter only in so far that they may reduce the predictive power of the test, they do not neccesarily limit their extrapolation outside of King's County. However, if these effects are unique to King's County, we would neither catch them in the dataset nor have the ability to develop a model to solve them. Thus, this raises the need to continue this test on future cities.
+
+
+
+#### Conclusion
+We can now test this model against the testing dataset. Additionally we can preform a paired t-test to compare the predicted and actual differences.
+
+```{r}
+#test the model
+test2 <- test[,c("sqft_living","waterfront","grade","sqft_basement","yr_renovated")]
+grade <- as.data.frame(dummify(test$grade))
+colnames(grade) <- paste0("grade",colnames(grade))
+predictions <- cbind(test2,grade)[,-3]
+
+predicted_prices <- predict.lm(second_order,predictions)
+
+price_comparision <- data.frame(predict=predicted_prices,actual=test$price)
+plot(price_comparision$predict,price_comparision$actual,xlab="Actual Price",ylab="Predicted Price",main="Testing Prices")
+
+pander(t.test(price_comparision$predict,price_comparision$actual ,paired=TRUE))
+```
+
+On the testing dataset, we get a correlation of about `r round(corr(price_comparision),2)` between the predicted and actual prices on the testing dataset. Furthermore, the t-test suggests that the their is not a signficant difference, at the 5% level, between the true values and the predicted values. Thus, this is a model that we can conclude has strong signficance. 
+
+Overall, this gives us confidence that we have a model that accurately predicts housing prices close to the true values, at the 5%. However, given the limitations of the model, in terms of predicting extreme values, and the limit to one county, future research should seek to develop both non-paramtric alternatives to our linear regression and apply our research to other cities to help towards developing a more robust model.
+
